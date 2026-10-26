@@ -2,7 +2,11 @@
 
 Full-stack (MERN) platform to build price datasets, backtest trading strategies, and analyse risk/return metrics.
 
-**Live:** <frontend link> · **API health:** <render link>/api/health · **Demo video:** <link>
+## Links
+
+- **Live Website:** https://quantlab-drab.vercel.app/
+- **Backend Health Check:** https://quantlab-bzr6.onrender.com/api/health
+- **Demo Video:** https://drive.google.com/file/d/1DCd7EjVkzIYcPB7nGGfMGeHleaPldFp4/view?usp=sharing
 
 ## Features
 - Secure auth: bcrypt, JWT in HttpOnly cookie, rate-limited login, generic errors
