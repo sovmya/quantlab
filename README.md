@@ -22,7 +22,7 @@
 
 A trading strategy is a set of rules, such as "buy when the short-term trend crosses above the long-term trend, sell when it crosses back". A **backtest** replays those rules over past prices to estimate how the strategy would have done.
 
-Most beginner backtests are misleading. They ignore trading fees, quietly use tomorrow's information to make today's decision, and judge success by profit alone. QuantLab is built to avoid those mistakes by design. It makes every assumption explicit, compares each strategy against a simple Buy & Hold benchmark, and reports risk alongside return.
+Most beginner backtests can be misleading. They ignore trading fees, quietly use tomorrow's information to make today's decision, and judge success by profit alone. QuantLab is built to avoid those mistakes by design. It makes every assumption explicit, compares each strategy against a simple Buy & Hold benchmark, and reports risk alongside return.
 
 ## Try it in 2 minutes
 
