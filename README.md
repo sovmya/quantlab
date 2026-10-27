@@ -92,4 +92,133 @@ prices ──► strategy generates signals ──► engine simulates trades �
 - Login compares against a dummy hash when the email doesn't exist, so response time doesn't reveal which emails are registered. The error message is generic too
 - **Every query is scoped to the logged-in user** (`{ _id, user }`), so another user's data simply returns 404 and cannot be reached by guessing ids
 - Strict type, range and ObjectId validation on all input, which blocks NoSQL-injection payloads like `{"$gt": ""}`
-- Strategy lookup uses `Object.hasOwn`, so inputs like
+- Strategy lookup uses `Object.hasOwn`, so inputs like `"constructor"` can't reach prototype properties
+- Rate limiting (30 login/register attempts and 600 API requests per 15 minutes per IP), Helmet security headers, 1 MB body limit, and per-user caps (20 datasets, 200 backtests)
+- Secrets live only in environment variables. The server **refuses to start** if they are missing, and `.env` is never committed
+
+**Reliability**
+- One central error handler turns every failure into a clean JSON response. Server errors are logged internally and never leak stack traces
+- Every page implements loading, error (with retry) and empty states
+- Unit tests cover the indicators, the no-look-ahead rule, fee impact and drawdown
+
+**Frontend**
+- Context API holds auth state. The cookie is the source of truth, confirmed through `/auth/me` on load
+- A `ProtectedRoute` wrapper guards every private page
+- The API is called through `/api` in development (Vite proxy) and production (Vercel rewrite), so the session cookie is first-party and works even in browsers that block third-party cookies, with no CORS configuration
+
+## Architecture
+
+```
+React (Vite) ──► /api ──► Express
+                           ├─ middlewares   auth, error handling, rate limit, helmet
+                           ├─ routes
+                           ├─ controllers   validate input, orchestrate
+                           ├─ services      strategies · indicators · backtest engine · data generator
+                           └─ models        Mongoose ──► MongoDB Atlas
+```
+
+Controllers stay thin. The business logic lives in `services/`, which has no knowledge of HTTP.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | React, Vite, React Router, Context API, Axios, Recharts, CSS |
+| Backend | Node.js, Express |
+| Database | MongoDB (Atlas), Mongoose |
+| Auth & security | JWT, HttpOnly cookies, bcrypt, Helmet, express-rate-limit |
+| Testing | Node.js built-in test runner |
+| Deployment | Vercel (frontend), Render (backend), MongoDB Atlas |
+
+## Project structure
+
+```
+quantlab/
+├── backend/
+│   ├── config/         env validation, database connection
+│   ├── controllers/    auth, dataset, backtest
+│   ├── middlewares/    auth.middleware.js, error.middleware.js
+│   ├── models/         user, dataset, backtest
+│   ├── routes/
+│   ├── services/       indicators, strategies, backtestEngine, dataGenerator
+│   ├── tests/          engine.test.js
+│   ├── utils/          asyncHandler, httpError, validate, generateToken
+│   └── index.js
+└── frontend/
+    ├── vercel.json     API rewrite + SPA fallback
+    └── src/            pages, components, context, services, utils
+```
+
+## Run it locally
+
+**Requirements:** Node 18+ and a MongoDB Atlas cluster (or any MongoDB URI).
+
+```bash
+git clone https://github.com/sovmya/quantlab.git
+cd quantlab/backend
+npm install
+cp .env.example .env     # then fill in the values below
+npm test                 # runs the engine unit tests
+npm run dev              # API on http://localhost:5000
+```
+
+In a second terminal:
+
+```bash
+cd quantlab/frontend
+npm install
+npm run dev              # app on http://localhost:5173
+```
+
+**Environment variables** (`backend/.env`)
+
+| Variable | Description |
+|---|---|
+| `MONGO_URI` | MongoDB connection string (required) |
+| `JWT_SECRET` | Long random string used to sign tokens (required) |
+| `JWT_EXPIRES_IN` | Token lifetime, default `7d` |
+| `PORT` | API port, default `5000` |
+| `NODE_ENV` | `development` or `production` |
+
+Generate a strong secret with:
+`node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`
+
+**Deploying:** run the backend on Render (root directory `backend`, start command `npm start`, same env vars with `NODE_ENV=production`). Run the frontend on Vercel (root directory `frontend`) and point the `destination` in `frontend/vercel.json` at your Render URL.
+
+## API
+
+All routes are under `/api`. Everything except register, login and logout requires a valid session cookie.
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| POST | `/auth/register`, `/auth/login`, `/auth/logout` | Authentication |
+| GET | `/auth/me` | Current user |
+| GET | `/datasets` | List your datasets |
+| POST | `/datasets/generate` | Create a synthetic (GBM) dataset |
+| POST | `/datasets/upload` | Create a dataset from CSV rows |
+| GET / DELETE | `/datasets/:id` | Read / delete a dataset |
+| GET | `/backtests/strategies` | Strategy definitions and parameter specs |
+| POST | `/backtests` | Run and save a backtest |
+| GET | `/backtests` | List saved backtests |
+| GET / DELETE | `/backtests/:id` | Read / delete a backtest |
+
+## Methodology and assumptions
+
+- **Execution:** signals at the close of day *t* are executed at the close of day *t+1*. This is a simulation convention, not a guarantee of real-world fills.
+- **Portfolio:** single asset, long-only, fully invested or fully in cash. No short selling or leverage.
+- **Costs:** a percentage fee on every buy and sell. Slippage and taxes are not modelled.
+- **Annualisation:** 252 trading days per year; Sharpe uses a risk-free rate of 0.
+- **Synthetic data:** GBM prices are for reproducible experiments and understanding how backtests behave. Good results on simulated data do not prove a strategy has a real-market edge.
+
+## Limitations and future work
+
+- Multi-asset portfolios and position sizing
+- Short selling and additional execution models
+- Parameter-grid optimisation and walk-forward testing to guard against overfitting
+- Live or scheduled market-data ingestion
+- Email verification and password reset, and revocable sessions (a JWT can't currently be invalidated before it expires)
+- On the free hosting tier, all visitors reach the API through one proxy, so the IP-based rate limit is shared between them. A production setup would pass the real client IP through.
+
+## Disclaimer
+
+QuantLab is an educational and analytical tool, not investment advice. Historical and simulated results do not guarantee future performance.
